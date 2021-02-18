@@ -18,8 +18,7 @@ import {
   getProvider,
   getSigner,
   getNetworkId,
-  getWeb3Read,
-  getLegacyProvider
+  getWeb3Read
 } from './web3'
 
 import { namehash } from './utils/namehash'
@@ -39,16 +38,12 @@ const transferGasCost = 21000
 
 function checkArguments({
   registryAddress,
-  ethAddress,
-  legacyAuctionRegistrarAddress,
+  tldRegistrarAddress,
   provider
 }) {
   if (!registryAddress) throw 'No registry address given to Registrar class'
 
-  if (!legacyAuctionRegistrarAddress)
-    throw 'No legacy auction address given to Registrar class'
-
-  if (!ethAddress) throw 'No .eth address given to Registrar class'
+  if (!tldRegistrarAddress) throw `No  .${process.env.REACT_APP_REGISTRAR_TLD} address given to Registrar class`
 
   if (!provider) throw 'Provider is required for Registrar'
 
@@ -64,7 +59,7 @@ function getBufferedPrice(price){
 export default class Registrar {
   constructor({
     registryAddress,
-    ethAddress,
+    tldRegistrarAddress,
     legacyAuctionRegistrarAddress,
     controllerAddress,
     bulkRenewalAddress,
@@ -72,36 +67,30 @@ export default class Registrar {
   }) {
     checkArguments({
       registryAddress,
-      ethAddress,
+      tldRegistrarAddress,
       legacyAuctionRegistrarAddress,
       provider
     })
 
     const permanentRegistrar = getPermanentRegistrarContract({
-      address: ethAddress,
+      address: tldRegistrarAddress,
       provider
     })
     const permanentRegistrarController = getPermanentRegistrarControllerContract(
       { address: controllerAddress, provider }
     )
 
-    const legacyAuctionRegistrar = getLegacyAuctionContract({
-      address: legacyAuctionRegistrarAddress,
-      provider
-    })
-
-    const bulkRenewal = getBulkRenewalContract({
-      address: bulkRenewalAddress,
-      provider
-    })
+    // const bulkRenewal = getBulkRenewalContract({
+    //   address: bulkRenewalAddress,
+    //   provider
+    // })
 
     const ENS = getENSContract({ address: registryAddress, provider })
 
     this.permanentRegistrar = permanentRegistrar
     this.permanentRegistrarController = permanentRegistrarController
-    this.legacyAuctionRegistrar = legacyAuctionRegistrar
     this.registryAddress = registryAddress
-    this.bulkRenewal = bulkRenewal
+    // this.bulkRenewal = bulkRenewal
     this.ENS = ENS
   }
 
@@ -332,7 +321,14 @@ export default class Registrar {
       signer
     )
     const account = await getAccount()
-    const resolverAddr = await this.getAddress('resolver.eth')
+    const resolverAddr = process.env.REACT_APP_TLD_RESOLVER || await this.getAddress('resolver.'+process.env.REACT_APP_REGISTRAR_TLD)
+    console.log('LIB: MAKE_COMMITMENT',
+      name,
+      owner,
+      secret,
+      resolverAddr,
+      account
+    );
     if (parseInt(resolverAddr, 16) === 0) {
       return permanentRegistrarController.makeCommitment(name, owner, secret)
     } else {
@@ -367,7 +363,6 @@ export default class Registrar {
     )
     const account = await getAccount()
     const commitment = await this.makeCommitment(label, account, secret)
-
     return permanentRegistrarController.commit(commitment)
   }
 
@@ -381,7 +376,8 @@ export default class Registrar {
     const account = await getAccount()
     const price = await this.getRentPrice(label, duration)
     const priceWithBuffer = getBufferedPrice(price)
-    const resolverAddr = await this.getAddress('resolver.eth')
+    const resolverAddr = process.env.REACT_APP_TLD_RESOLVER || await this.getAddress('resolver.'+process.env.REACT_APP_REGISTRAR_TLD)
+
     if (parseInt(resolverAddr, 16) === 0) {
       return permanentRegistrarController.register(
         label,
@@ -403,20 +399,6 @@ export default class Registrar {
     }
   }
 
-  async estimateGasLimit( cb ){
-    let gas = 0
-    try{
-      gas = (await cb()).toNumber()
-    }catch(e){
-      let matched = e.message.match(/err: insufficient funds for transfer \(supplied gas (.*)\)/)
-      if(matched){
-        gas = parseInt(matched[1])
-      }
-      console.log({gas, e, matched})
-    }
-    return gas + transferGasCost
-  }
-
   async renew(label, duration) {
     const permanentRegistrarControllerWithoutSigner = this
       .permanentRegistrarController
@@ -426,9 +408,8 @@ export default class Registrar {
     )
     const price = await this.getRentPrice(label, duration)
     const priceWithBuffer = getBufferedPrice(price)
-    const gasLimit = await this.estimateGasLimit(() => {
-      return permanentRegistrarController.estimate.renew(label, duration, { value:priceWithBuffer})
-    })
+    const gas = await permanentRegistrarController.estimate.renew(label, duration, { value: priceWithBuffer})
+    const gasLimit = gas.toNumber() + transferGasCost
     return permanentRegistrarController.renew(label, duration, { value: priceWithBuffer, gasLimit })
   }
 
@@ -441,9 +422,8 @@ export default class Registrar {
     )
     const prices = await this.getRentPrices(labels, duration)
     const pricesWithBuffer = getBufferedPrice(prices)
-    const gasLimit = await this.estimateGasLimit(() => {
-      return bulkRenewal.estimate.renewAll(labels, duration, { value:pricesWithBuffer})
-    })
+    const gas = await bulkRenewal.estimate.renewAll(labels, duration, { value: pricesWithBuffer })
+    const gasLimit = gas.toNumber() + transferGasCost
     return bulkRenewal.renewAll(
       labels,
       duration,
@@ -476,17 +456,19 @@ export default class Registrar {
   async getDNSEntry(name, parentOwner, owner) {
     // Do not cache as it needs to be refetched on "Refresh"
     const dnsRegistrar = {}
-    const web3Provider = getLegacyProvider()
-    const provider = await getProvider()
-    const registrarContract = await getDnsRegistrarContract({parentOwner, provider})
-    const oracleAddress = await registrarContract.oracle()
-    const registrarjs = new DNSRegistrarJS(web3Provider.givenProvider, oracleAddress)
+    const web3 = await getWeb3Read()
+
+    // This will probably only work if accessed via Metamask which holds its own web3.js provider.
+    // It needs refactoring to support local environment provided via ethers.js provider, potentially porting dnsprovejs from web3.js to ethers.js
+    const provider = web3._web3Provider
+    const registrarjs = new DNSRegistrarJS(provider, parentOwner)
     try {
       const claim = await registrarjs.claim(name)
       const result = claim.getResult()
       dnsRegistrar.claim = claim
       dnsRegistrar.result = result
       if (result.found) {
+        const proofs = result.proofs
         dnsRegistrar.dnsOwner = claim.getOwner()
         if (!dnsRegistrar.dnsOwner) {
           // DNS Record is invalid
@@ -575,7 +557,7 @@ export default class Registrar {
 }
 
 async function getEthResolver(ENS) {
-  const resolverAddr = await ENS.resolver(namehash('eth'))
+  const resolverAddr = await ENS.resolver(namehash(process.env.REACT_APP_REGISTRAR_TLD))
   const provider = await getProvider()
   return getResolverContract({ address: resolverAddr, provider })
 }
@@ -583,30 +565,25 @@ async function getEthResolver(ENS) {
 export async function setupRegistrar(registryAddress) {
   const provider = await getProvider()
   const ENS = getENSContract({ address: registryAddress, provider })
-  const Resolver = await getEthResolver(ENS)
+  
+  const tldRegistrarAddress = await ENS.owner(namehash(process.env.REACT_APP_REGISTRAR_TLD))
 
-  let ethAddress = await ENS.owner(namehash('eth'))
+  const controllerAddress = process.env.REACT_APP_REGISTRAR_CONTROLLER;
+  // let controllerAddress = await Resolver.interfaceImplementer(
+  //   namehash(process.env.REACT_APP_REGISTRAR_TLD),
+  //   permanentRegistrarInterfaceId
+  // )
 
-  let controllerAddress = await Resolver.interfaceImplementer(
-    namehash('eth'),
-    permanentRegistrarInterfaceId
-  )
-  let legacyAuctionRegistrarAddress = await Resolver.interfaceImplementer(
-    namehash('eth'),
-    legacyRegistrarInterfaceId
-  )
-
-  let bulkRenewalAddress = await Resolver.interfaceImplementer(
-    namehash('eth'),
-    bulkRenewalInterfaceId
-  )
+  // let bulkRenewalAddress = await Resolver.interfaceImplementer(
+  //   namehash(process.env.REACT_APP_REGISTRAR_TLD),
+  //   bulkRenewalInterfaceId
+  // )
 
   return new Registrar({
     registryAddress,
-    legacyAuctionRegistrarAddress,
-    ethAddress,
+    tldRegistrarAddress,
     controllerAddress,
-    bulkRenewalAddress,
+    // bulkRenewalAddress,
     provider
   })
 }

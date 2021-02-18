@@ -54,32 +54,8 @@ function getLabelhash(label) {
   return labelhash(label)
 }
 
-const contracts = {
-  1: {
-    registry: '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e'
-  },
-  3: {
-    registry: '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e'
-  },
-  4: {
-    registry: '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e'
-  },
-  5: {
-    registry: '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e'
-  }
-}
-
 export class ENS {
   constructor({ networkId, registryAddress, provider }) {
-    this.contracts = contracts
-    const hasRegistry = has(this.contracts[networkId], 'registry')
-
-    if (!hasRegistry && !registryAddress) {
-      throw new Error(`Unsupported network ${networkId}`)
-    } else if (this.contracts[networkId] && !registryAddress) {
-      registryAddress = contracts[networkId].registry
-    }
-
     this.registryAddress = registryAddress
 
     const ENSContract = getENSContract({ address: registryAddress, provider })
@@ -518,7 +494,8 @@ export class ENS {
 
   async createSubdomain(name) {
     const account = await getAccount()
-    const publicResolverAddress = await this.getAddress('resolver.eth')
+    const publicResolverAddress = process.env.REACT_APP_TLD_RESOLVER || 
+      await this.getAddress('resolver.'+process.env.REACT_APP_REGISTRAR_TLD)
     try {
       return this.setSubnodeRecord(name, account, publicResolverAddress)
     } catch (e) {
