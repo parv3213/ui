@@ -1,4 +1,5 @@
 import has from 'lodash/has'
+import { wire } from 'bns'
 import { Contract, utils } from 'ethers'
 import {
   getWeb3,
@@ -7,7 +8,7 @@ import {
   getAccount,
   getSigner
 } from './web3'
-import { normalize } from 'eth-ens-namehash'
+import { normalize, hash } from 'eth-ens-namehash'
 import { formatsByName } from '@ensdomains/address-encoder'
 import { abi as ensContract } from '@ensdomains/contracts/abis/ens/ENS.json'
 
@@ -474,6 +475,49 @@ export class ENS {
     const Resolver = ResolverWithoutSigner.connect(signer)
     return Resolver.setContenthash(namehash, encodedContenthash)
   }
+
+  async getARecords(name) {
+    return await getDNSRecords(name, 'A')
+  }
+
+  async setARecord(name, ip) {
+    const resolverAddr = await this.getResolver(name)
+    // get other A  records from name to add in
+    const record = wire.Record.fromJSON({
+      name: name+'.',
+      ttl: 60000,
+      class: 'IN',
+      type: 'A',
+      data: { address: ip }
+    }).encode().toString('hex')
+    return this.setDNSRecordWithResolver(name, record, resolverAddr)
+  }
+  
+  async getDNSRecords(name, type) {
+    const resolverAddr = await this.getResolver(name)
+    const provider = await getProvider()
+    const ResolverWithoutSigner = getResolverContract({
+      address: resolver,
+      provider
+    })
+    console.log('get Dns recods', hash(name), utils.id(name+'.'), type);
+    // bytes32 node, bytes32 name, uint16 resource
+    return await ResolverWithoutSigner.dnsRecord(hash(name), utils.id(name+'.'), type)
+  }
+
+  async setDNSRecordWithResolver(name, record, resolverAddr) {
+    const namehash = getNamehash(name)
+    const provider = await getProvider()
+    const ResolverWithoutSigner = getResolverContract({
+      address: resolverAddr,
+      provider
+    })
+    const signer = await getSigner()
+    const Resolver = ResolverWithoutSigner.connect(signer)
+    console.log('LIB - set DNS record', namehash, record);
+    return Resolver.setDNSRecords(namehash, record)
+  }
+
 
   async setText(name, key, recordValue) {
     const resolverAddr = await this.getResolver(name)
