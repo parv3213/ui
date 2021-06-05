@@ -3,6 +3,7 @@ import { abi as ensContract } from '@ensdomains/contracts/abis/ens/ENS.json'
 import { abi as reverseRegistrarContract } from '@ensdomains/contracts/abis/ens/ReverseRegistrar.json'
 import { abi as oldResolverContract } from '@ensdomains/contracts/abis/ens-022/PublicResolver.json'
 import { abi as resolverContract } from '@ensdomains/contracts/abis/resolver/Resolver.json'
+import { abi as dnsResolverContract } from '@ensdomains/contracts/abis/resolver/DNSResolver.json'
 import { abi as testRegistrarContract } from '@ensdomains/contracts/abis/ens/TestRegistrar.json'
 import { abi as dnsRegistrarContract } from '@ensdomains/contracts/abis/dnsregistrar/DNSRegistrar.json'
 import { abi as legacyAuctionRegistrarContract } from '@ensdomains/contracts/abis/ens/HashRegistrar'
@@ -17,6 +18,10 @@ function getReverseRegistrarContract({ address, provider }) {
 
 function getResolverContract({ address, provider }) {
   return new Contract(address, resolverContract, provider)
+}
+
+function getDNSResolverContract({ address, provider }) {
+  return new Contract(address, dnsResolverContract, provider)
 }
 
 function getOldResolverContract({ address, provider }) {
@@ -60,6 +65,7 @@ export {
   getReverseRegistrarContract,
   getENSContract,
   getResolverContract,
+  getDNSResolverContract,
   getOldResolverContract,
   getDnsRegistrarContract,
   getPermanentRegistrarContract,
