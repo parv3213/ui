@@ -161,17 +161,15 @@ export default class Registrar {
         getAvailable = RegistrarController.available(label)
       }
 
-      const [available, nameExpires, gracePeriod] = await Promise.all([
-        getAvailable,
-        Registrar.nameExpires(labelHash),
-        this.getGracePeriod(Registrar)
+      const [available] = await Promise.all([
+        getAvailable
       ])
 
       ret = {
         ...ret,
         available,
-        gracePeriod,
-        nameExpires: nameExpires > 0 ? new Date(nameExpires * 1000) : null
+        gracePeriod: null,
+        nameExpires: null
       }
       // Returns registrar address if owned by new registrar.
       // Keep it as a separate call as this will throw exception for non existing domains
@@ -290,7 +288,7 @@ export default class Registrar {
 
   async getRentPrice(name, duration) {
     const permanentRegistrarController = this.permanentRegistrarController
-    let price = await permanentRegistrarController.rentPrice(name, duration)
+    let price = await permanentRegistrarController.price(name)
     return price
   }
 
@@ -382,7 +380,6 @@ export default class Registrar {
       return permanentRegistrarController.register(
         label,
         account,
-        duration,
         secret,
         { value: priceWithBuffer }
       )
@@ -390,7 +387,6 @@ export default class Registrar {
       return permanentRegistrarController.registerWithConfig(
         label,
         account,
-        duration,
         secret,
         resolverAddr,
         account,
