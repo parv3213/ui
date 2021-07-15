@@ -36,7 +36,6 @@ export async function setupWeb3({
   enforceReload = false,
   infura = false
 }) {
-  console.log("Here"+process.env.REACT_APP_REGISTRAR_CONTROLLER)
   if(enforceReload){
     provider = null
     readOnly = false
