@@ -10,8 +10,8 @@ let requested = false
 let address
 
 function getDefaultProvider() {
-  legacyProvider = new Web3(getNetworkProviderUrl(1))
-  return new ethers.getDefaultProvider('homestead')
+  legacyProvider = new Web3(getNetworkProviderUrl(process.env.REACT_APP_REACT_NETWORK_NUMBER))
+  return new ethers.getDefaultProvider(process.env.REACT_APP_REACT_NETWORK_NAME)
 }
 
 function getJsonRpcProvider(providerOrUrl) {
@@ -25,8 +25,8 @@ function getWeb3Provider(providerOrUrl) {
 }
 
 function getInfuraProvider(infura) {
-  legacyProvider = new Web3(`https://mainnet.infura.io/v3/${infura}`)
-  return new ethers.providers.InfuraProvider('homestead', infura)
+  legacyProvider = new Web3(getNetworkProviderUrl(process.env.REACT_APP_REACT_NETWORK_NUMBER))
+  return new ethers.providers.InfuraProvider(process.env.REACT_APP_REACT_NETWORK_NAME, infura)
 }
 
 export async function setupWeb3({
@@ -36,6 +36,7 @@ export async function setupWeb3({
   enforceReload = false,
   infura = false
 }) {
+  console.log("Here"+process.env.REACT_APP_REGISTRAR_CONTROLLER)
   if(enforceReload){
     provider = null
     readOnly = false
